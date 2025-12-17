@@ -3,167 +3,106 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ECHO – Affiliate Intelligence Console</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<title>Email Extractor</title>
+
 <style>
-body { font-family: Arial, sans-serif; background:#f5f5f5; margin:0; padding:30px }
-.container { background:#fff; padding:30px; border-radius:8px; max-width:1200px; margin:auto; box-shadow:0 2px 10px rgba(0,0,0,.1) }
-textarea { width:100%; height:200px; font-family:monospace; margin-top:10px }
-button { padding:10px 18px; margin:6px 6px 6px 0; border:none; border-radius:4px; cursor:pointer; background:#4CAF50; color:#fff }
-.secondary { background:#2196F3 }
-.stat { font-size:18px; font-weight:bold; color:#4CAF50 }
-.email-preview { max-height:300px; overflow-y:auto; border:1px solid #ddd; padding:10px; margin-top:20px; background:#fafafa; border-radius:4px; font-family:monospace; font-size:13px; white-space:pre-wrap }
+body {
+  font-family: Arial, sans-serif;
+  background: #f5f5f5;
+  padding: 30px;
+}
+.container {
+  background: #fff;
+  padding: 25px;
+  border-radius: 8px;
+  max-width: 1000px;
+  margin: auto;
+  box-shadow: 0 2px 10px rgba(0,0,0,.1);
+}
+textarea {
+  width: 100%;
+  height: 220px;
+  font-family: monospace;
+  margin-top: 10px;
+}
+button {
+  padding: 10px 18px;
+  margin-top: 10px;
+  margin-right: 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #4CAF50;
+  color: #fff;
+}
+.secondary {
+  background: #2196F3;
+}
+.results {
+  margin-top: 20px;
+  border: 1px solid #ddd;
+  padding: 10px;
+  background: #fafafa;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+.stat {
+  font-weight: bold;
+  color: #4CAF50;
+}
 </style>
 </head>
+
 <body>
 <div class="container">
-<h1>📊 ECHO – Affiliate Intelligence Console</h1>
-<input type="file" id="fileInput" multiple accept=".csv,.txt,.tsv" />
-<textarea id="dataInput" placeholder="Paste or upload transaction data..."></textarea>
-<button onclick="analyzeData()">Analyze</button>
-<button onclick="downloadSpreadsheet()" class="secondary">Download Excel & Briefing</button>
-<div id="stats"></div>
-<div id="briefing" class="email-preview" style="display:none;"></div>
+  <h1>📧 Simple Email Extractor</h1>
+  <p>Paste any text or transaction data below.</p>
+
+  <textarea id="input" placeholder="Paste data here..."></textarea>
+
+  <button onclick="extractEmails()">Extract Emails</button>
+  <button class="secondary" onclick="copyEmails()">Copy Emails</button>
+  <button class="secondary" onclick="downloadCSV()">Download CSV</button>
+
+  <p id="stats"></p>
+  <div id="output" class="results"></div>
 </div>
+
 <script>
-let playerData = {};
-let errorLog = [];
+let emails = [];
 
-const emailTemplates = {
-  'Reload bonus': (player) => `Subject: Reload Bonus for ${player.email}\n\nHi ${player.email},\nWe noticed you've been inactive. Here's a special reload bonus just for you!\nClaim it now and enjoy!\n`,
-  'Loyalty email': (player) => `Subject: Thank You for Being a VIP, ${player.email}\n\nHi ${player.email},\nWe appreciate your loyalty! Here's an exclusive offer to keep you rewarded.\n`,
-  'Re-engagement offer': (player) => `Subject: We Miss You, ${player.email}\n\nHi ${player.email},\nIt's been a while! Come back and claim your personalized offer today.\n`,
-  'No action': (player) => `Subject: Hello ${player.email}\n\nHi ${player.email},\nThank you for being with us. No action required today.\n`
-};
+function extractEmails() {
+  const text = document.getElementById('input').value;
+  const matches = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g);
 
-document.getElementById('fileInput').addEventListener('change', e => {
-  Array.from(e.target.files).forEach(file => {
-    const r = new FileReader();
-    r.onload = ev => document.getElementById('dataInput').value += '\n' + ev.target.result;
-    r.readAsText(file);
-  });
-});
+  emails = matches ? Array.from(new Set(matches.map(e => e.toLowerCase()))) : [];
 
-function analyzeData() {
-  const lines = document.getElementById('dataInput').value.split('\n');
-  playerData = {};
-  errorLog = [];
-
-  lines.forEach(line => {
-    if (!line.trim()) return;
-    const emailMatch = line.match(/([\w.-]+@[\w.-]+\.[A-Za-z]{2,})/);
-    if (!emailMatch) { errorLog.push({line, reason:'No email'}); return; }
-    const email = emailMatch[0];
-
-    const wager = parseFloat((line.match(/\t(\d+\.\d+)/)||[])[1]||0);
-    const date = (line.match(/(\d{4}-\d{2}-\d{2})/)||[])[1]||'';
-
-    if (!playerData[email]) {
-      playerData[email] = { email: email, totalWager:0, transactions:0, lastSeen:'', firstSeen:'' };
-    }
-
-    playerData[email].totalWager += wager;
-    playerData[email].transactions += 1;
-    if (!playerData[email].firstSeen && date) playerData[email].firstSeen = date;
-    if (date) playerData[email].lastSeen = date;
-  });
-
-  document.getElementById('stats').innerHTML = `Players: <span class=\"stat\">${Object.keys(playerData).length}</span>`;
-
-  generateBriefing();
+  document.getElementById('output').textContent = emails.join('\\n');
+  document.getElementById('stats').innerHTML =
+    `Emails found: <span class="stat">${emails.length}</span>`;
 }
 
-function generateBriefing() {
-  const briefingDiv = document.getElementById('briefing');
-  briefingDiv.style.display = 'block';
-  let briefingText = `**ECHO Daily Brief – ${new Date().toLocaleDateString()}**\n\n`;
-
-  const players = Object.values(playerData);
-
-  const priorityPlayers = players.map(p => ({
-    ...p,
-    Priority: calculatePriority(p),
-    Tag: classifyPlayer(p),
-    AtRisk: isAtRisk(p),
-    RecommendedAction: recommendAction(p)
-  })).sort((a,b)=>b.Priority - a.Priority);
-
-  briefingText += 'Players requiring immediate action:\n';
-  priorityPlayers.slice(0,10).forEach(p => {
-    briefingText += `• ${p.email} | Segment: ${p.Tag} | Priority: ${p.Priority} | Last Seen: ${p.lastSeen} | Action: ${p.RecommendedAction}\nEmail Template:\n${emailTemplates[p.RecommendedAction](p)}\n`;
-  });
-
-  briefingText += '\nWatchlist:\n';
-  priorityPlayers.slice(10,20).forEach(p => {
-    briefingText += `• ${p.email} | Segment: ${p.Tag} | Trend: ${trend(p)} | Last Seen: ${p.lastSeen}\n`;
-  });
-
-  briefingText += '\nDo Not Contact This Week:\n';
-  priorityPlayers.slice(20).forEach(p => {
-    briefingText += `• ${p.email} | Segment: ${p.Tag} | Last Seen: ${p.lastSeen}\n`;
-  });
-
-  briefingDiv.textContent = briefingText;
+function copyEmails() {
+  if (!emails.length) return alert('No emails to copy.');
+  navigator.clipboard.writeText(emails.join('\\n'));
+  alert('Emails copied to clipboard.');
 }
 
-function classifyPlayer(p) {
-  if (p.totalWager >= 5000) return 'Whale';
-  if (p.totalWager >= 1000 && p.transactions >=10) return 'VIP';
-  if (p.transactions >=5) return 'Regular';
-  return 'Casual';
-}
+function downloadCSV() {
+  if (!emails.length) return alert('No emails to download.');
 
-function isAtRisk(p) {
-  if (!p.lastSeen) return true;
-  return (Date.now() - new Date(p.lastSeen))/86400000 > 30;
-}
+  let csv = 'Email\\n' + emails.join('\\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
 
-function trend(p) {
-  if (p.transactions >=15) return 'UP';
-  if (p.transactions >=5) return 'FLAT';
-  return 'DOWN';
-}
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'emails.csv';
+  link.click();
 
-function calculatePriority(p) {
-  let score=0;
-  if (classifyPlayer(p)==='Whale') score+=40;
-  if (classifyPlayer(p)==='VIP') score+=25;
-  if (isAtRisk(p)) score+=20;
-  if ((p.totalWager/p.transactions)*p.transactions>300) score+=15;
-  if (!activeThisWeek(p)) score+=10;
-  return score;
-}
-
-function activeThisWeek(p) {
-  if (!p.lastSeen) return false;
-  return (Date.now() - new Date(p.lastSeen))/86400000 <=7;
-}
-
-function recommendAction(p) {
-  if (classifyPlayer(p)==='Whale' && !activeThisWeek(p)) return 'Reload bonus';
-  if (classifyPlayer(p)==='VIP' && isAtRisk(p)) return 'Loyalty email';
-  if (p.totalWager>300 && trend(p)==='DOWN') return 'Re-engagement offer';
-  return 'No action';
-}
-
-function downloadSpreadsheet() {
-  const wb = XLSX.utils.book_new();
-  const rows = Object.values(playerData).map(p => ({
-    Email: p.email,
-    Tag: classifyPlayer(p),
-    TotalWager: p.totalWager.toFixed(2),
-    Transactions: p.transactions,
-    Priority: calculatePriority(p),
-    AtRisk: isAtRisk(p) ? 'YES':'NO',
-    FirstSeen: p.firstSeen,
-    LastSeen: p.lastSeen,
-    RecommendedAction: recommendAction(p),
-    EmailTemplate: emailTemplates[recommendAction(p)](p)
-  }));
-
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'All Players');
-  if (errorLog.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(errorLog), 'Error Log');
-  XLSX.writeFile(wb, 'ECHO_Affiliate_Intelligence.xlsx');
+  URL.revokeObjectURL(url);
 }
 </script>
 </body>
