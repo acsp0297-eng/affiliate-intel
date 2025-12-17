@@ -18,6 +18,7 @@ button { padding:10px 18px; margin:6px 6px 6px 0; border:none; border-radius:4px
 <div id="stats"></div>
 </div><script>
 let playerData = {};
+let errorLog = [];
 
 document.getElementById('fileInput').addEventListener('change', e => {
   Array.from(e.target.files).forEach(file => {
@@ -32,18 +33,20 @@ function analyzeData() {
   playerData = {};
 
   lines.forEach(line => {
+    if (!line.trim()) return;
     const email = line.match(/([\w.-]+@[\w.-]+\.[A-Za-z]{2,})/);
-    if (!email) return;
+    if (!email) { errorLog.push({line, reason:'No email'}); return; }
 
     const wager = parseFloat((line.match(/\t(\d+\.\d+)/)||[])[1]||0);
     const date = (line.match(/(\d{4}-\d{2}-\d{2})/)||[])[1]||'';
 
     if (!playerData[email[0]]) {
-      playerData[email[0]] = { email: email[0], totalWager:0, transactions:0, lastSeen:'' };
+      playerData[email[0]] = { email: email[0], totalWager:0, transactions:0, lastSeen:'', firstSeen:'' };
     }
 
     playerData[email[0]].totalWager += wager;
     playerData[email[0]].transactions += 1;
+    if (!playerData[email[0]].firstSeen && date) playerData[email[0]].firstSeen = date;
     if (date) playerData[email[0]].lastSeen = date;
   });
 
@@ -82,6 +85,11 @@ function downloadSpreadsheet() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'All Players');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.filter(r=>r.Tag==='Whale'||r.Tag==='VIP')), 'VIP');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.filter(r=>r.AtRisk==='YES')), 'At Risk');
+
+  // Error Log Sheet
+  if (errorLog.length) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(errorLog), 'Error Log');
+  }
 
   XLSX.writeFile(wb, 'affiliate_intelligence.xlsx');
 }
