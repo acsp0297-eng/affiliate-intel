@@ -2,24 +2,27 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Affiliate Intelligence Console</title><!-- SheetJS --><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><style>
+<title>ECHO – Affiliate Intelligence Console</title><!-- SheetJS --><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><style>
 body { font-family: Arial, sans-serif; background:#f5f5f5; margin:0; padding:30px }
 .container { background:#fff; padding:30px; border-radius:8px; max-width:1200px; margin:auto; box-shadow:0 2px 10px rgba(0,0,0,.1) }
 textarea { width:100%; height:200px; font-family:monospace; margin-top:10px }
 button { padding:10px 18px; margin:6px 6px 6px 0; border:none; border-radius:4px; cursor:pointer; background:#4CAF50; color:#fff }
 .secondary { background:#2196F3 }
 .stat { font-size:18px; font-weight:bold; color:#4CAF50 }
+.email-preview { max-height:200px; overflow-y:auto; border:1px solid #ddd; padding:10px; margin-top:20px; background:#fafafa; border-radius:4px; font-family:monospace; font-size:13px }
 </style></head>
 <body>
 <div class="container">
-<h1>📊 Affiliate Intelligence Console</h1><input type="file" id="fileInput" multiple accept=".csv,.txt,.tsv" />
-<textarea id="dataInput" placeholder="Paste or upload transaction data..."></textarea><button onclick="analyzeData()">Analyze</button> <button onclick="downloadSpreadsheet()" class="secondary">Download Excel</button>
+<h1>📊 ECHO – Affiliate Intelligence Console</h1><input type="file" id="fileInput" multiple accept=".csv,.txt,.tsv" />
+<textarea id="dataInput" placeholder="Paste or upload transaction data..."></textarea><button onclick="analyzeData()">Analyze</button> <button onclick="downloadSpreadsheet()" class="secondary">Download Excel & Briefing</button>
 
 <div id="stats"></div>
+<div id="briefing" class="email-preview" style="display:none;"></div>
 </div><script>
 let playerData = {};
 let errorLog = [];
 
+// File input handler
 document.getElementById('fileInput').addEventListener('change', e => {
   Array.from(e.target.files).forEach(file => {
     const r = new FileReader();
@@ -31,67 +34,126 @@ document.getElementById('fileInput').addEventListener('change', e => {
 function analyzeData() {
   const lines = document.getElementById('dataInput').value.split('\n');
   playerData = {};
+  errorLog = [];
 
   lines.forEach(line => {
     if (!line.trim()) return;
-    const email = line.match(/([\w.-]+@[\w.-]+\.[A-Za-z]{2,})/);
-    if (!email) { errorLog.push({line, reason:'No email'}); return; }
+    const emailMatch = line.match(/([\w.-]+@[\w.-]+\.[A-Za-z]{2,})/);
+    if (!emailMatch) { errorLog.push({line, reason:'No email'}); return; }
+    const email = emailMatch[0];
 
     const wager = parseFloat((line.match(/\t(\d+\.\d+)/)||[])[1]||0);
     const date = (line.match(/(\d{4}-\d{2}-\d{2})/)||[])[1]||'';
 
-    if (!playerData[email[0]]) {
-      playerData[email[0]] = { email: email[0], totalWager:0, transactions:0, lastSeen:'', firstSeen:'' };
+    if (!playerData[email]) {
+      playerData[email] = { email: email, totalWager:0, transactions:0, lastSeen:'', firstSeen:'' };
     }
 
-    playerData[email[0]].totalWager += wager;
-    playerData[email[0]].transactions += 1;
-    if (!playerData[email[0]].firstSeen && date) playerData[email[0]].firstSeen = date;
-    if (date) playerData[email[0]].lastSeen = date;
+    playerData[email].totalWager += wager;
+    playerData[email].transactions += 1;
+    if (!playerData[email].firstSeen && date) playerData[email].firstSeen = date;
+    if (date) playerData[email].lastSeen = date;
   });
 
-  document.getElementById('stats').innerHTML = `Players: <span class="stat">${Object.keys(playerData).length}</span>`;
+  document.getElementById('stats').innerHTML = `Players: <span class=\"stat\">${Object.keys(playerData).length}</span>`;
+
+  generateBriefing();
 }
 
-function classify(p) {
+// Executive briefing generator
+function generateBriefing() {
+  const briefingDiv = document.getElementById('briefing');
+  briefingDiv.style.display = 'block';
+  let briefingText = `**ECHO Daily Brief – ${new Date().toLocaleDateString()}**\n\n`;
+
+  const players = Object.values(playerData);
+
+  const priorityPlayers = players.map(p => ({
+    ...p,
+    Priority: calculatePriority(p),
+    Tag: classifyPlayer(p),
+    AtRisk: isAtRisk(p)
+  })).sort((a,b)=>b.Priority - a.Priority);
+
+  briefingText += 'Players requiring immediate action:\n';
+  priorityPlayers.slice(0,10).forEach(p => {
+    briefingText += `• ${p.email} | Segment: ${p.Tag} | Priority: ${p.Priority} | Last Seen: ${p.lastSeen} | Action: ${recommendAction(p)}\n`;
+  });
+
+  briefingText += '\nWatchlist:\n';
+  priorityPlayers.slice(10,20).forEach(p => {
+    briefingText += `• ${p.email} | Segment: ${p.Tag} | Trend: ${trend(p)} | Last Seen: ${p.lastSeen}\n`;
+  });
+
+  briefingText += '\nDo Not Contact This Week:\n';
+  priorityPlayers.slice(20).forEach(p => {
+    briefingText += `• ${p.email} | Segment: ${p.Tag} | Last Seen: ${p.lastSeen}\n`;
+  });
+
+  briefingDiv.textContent = briefingText;
+}
+
+function classifyPlayer(p) {
   if (p.totalWager >= 5000) return 'Whale';
-  if (p.totalWager >= 1000 && p.transactions >= 10) return 'VIP';
-  if (p.transactions >= 5) return 'Regular';
+  if (p.totalWager >= 1000 && p.transactions >=10) return 'VIP';
+  if (p.transactions >=5) return 'Regular';
   return 'Casual';
 }
 
-function atRisk(p) {
-  if (!p.lastSeen) return false;
-  return (Date.now() - new Date(p.lastSeen)) / 86400000 > 30;
+function isAtRisk(p) {
+  if (!p.lastSeen) return true;
+  return (Date.now() - new Date(p.lastSeen))/86400000 > 30;
 }
 
-function ltv(p) {
-  if (!p.transactions) return 0;
-  return (p.totalWager / p.transactions) * p.transactions * (p.transactions > 10 ? 1.3 : 1);
+function trend(p) {
+  if (p.transactions >=15) return 'UP';
+  if (p.transactions >=5) return 'FLAT';
+  return 'DOWN';
+}
+
+function calculatePriority(p) {
+  let score=0;
+  if (classifyPlayer(p)==='Whale') score+=40;
+  if (classifyPlayer(p)==='VIP') score+=25;
+  if (isAtRisk(p)) score+=20;
+  if ((p.totalWager/p.transactions)*p.transactions>300) score+=15;
+  if (!activeThisWeek(p)) score+=10;
+  return score;
+}
+
+function activeThisWeek(p) {
+  if (!p.lastSeen) return false;
+  return (Date.now() - new Date(p.lastSeen))/86400000 <=7;
+}
+
+function recommendAction(p) {
+  if (classifyPlayer(p)==='Whale' && !activeThisWeek(p)) return 'Reload bonus';
+  if (classifyPlayer(p)==='VIP' && isAtRisk(p)) return 'Loyalty email';
+  if (p.totalWager>300 && trend(p)==='DOWN') return 'Re-engagement offer';
+  return 'No action';
 }
 
 function downloadSpreadsheet() {
   const wb = XLSX.utils.book_new();
   const rows = Object.values(playerData).map(p => ({
     Email: p.email,
-    Tag: classify(p),
+    Tag: classifyPlayer(p),
     TotalWager: p.totalWager.toFixed(2),
     Transactions: p.transactions,
-    LTV: ltv(p).toFixed(2),
-    AtRisk: atRisk(p) ? 'YES':'NO',
-    LastSeen: p.lastSeen
+    Priority: calculatePriority(p),
+    AtRisk: isAtRisk(p) ? 'YES':'NO',
+    FirstSeen: p.firstSeen,
+    LastSeen: p.lastSeen,
+    RecommendedAction: recommendAction(p)
   }));
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'All Players');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.filter(r=>r.Tag==='Whale'||r.Tag==='VIP')), 'VIP');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.filter(r=>r.AtRisk==='YES')), 'At Risk');
 
-  // Error Log Sheet
   if (errorLog.length) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(errorLog), 'Error Log');
   }
 
-  XLSX.writeFile(wb, 'affiliate_intelligence.xlsx');
+  XLSX.writeFile(wb, 'ECHO_Affiliate_Intelligence.xlsx');
 }
 </script></body>
 </html>
