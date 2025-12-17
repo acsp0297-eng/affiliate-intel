@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,61 +27,144 @@ button { padding:10px 18px; margin:6px 6px 6px 0; border:none; border-radius:4px
 </div>
 <script>
 let playerData = {};
-let errorLog = [];const emailTemplates = { 'Reload bonus': (player) => Subject: Reload Bonus for ${player.email}\n\nHi ${player.email},\nWe noticed you've been inactive. Here's a special reload bonus just for you!\nClaim it now and enjoy!\n, 'Loyalty email': (player) => Subject: Thank You for Being a VIP, ${player.email}\n\nHi ${player.email},\nWe appreciate your loyalty! Here's an exclusive offer to keep you rewarded.\n, 'Re-engagement offer': (player) => Subject: We Miss You, ${player.email}\n\nHi ${player.email},\nIt's been a while! Come back and claim your personalized offer today.\n, 'No action': (player) => Subject: Hello ${player.email}\n\nHi ${player.email},\nThank you for being with us. No action required today.\n };
+let errorLog = [];
 
-document.getElementById('fileInput').addEventListener('change', e => { Array.from(e.target.files).forEach(file => { const r = new FileReader(); r.onload = ev => document.getElementById('dataInput').value += '\n' + ev.target.result; r.readAsText(file); }); });
+const emailTemplates = {
+  'Reload bonus': (player) => `Subject: Reload Bonus for ${player.email}\n\nHi ${player.email},\nWe noticed you've been inactive. Here's a special reload bonus just for you!\nClaim it now and enjoy!\n`,
+  'Loyalty email': (player) => `Subject: Thank You for Being a VIP, ${player.email}\n\nHi ${player.email},\nWe appreciate your loyalty! Here's an exclusive offer to keep you rewarded.\n`,
+  'Re-engagement offer': (player) => `Subject: We Miss You, ${player.email}\n\nHi ${player.email},\nIt's been a while! Come back and claim your personalized offer today.\n`,
+  'No action': (player) => `Subject: Hello ${player.email}\n\nHi ${player.email},\nThank you for being with us. No action required today.\n`
+};
 
-function analyzeData() { const lines = document.getElementById('dataInput').value.split('\n'); playerData = {}; errorLog = [];
-
-lines.forEach(line => { if (!line.trim()) return; const emailMatch = line.match(/([\w.-]+@[\w.-]+.[A-Za-z]{2,})/); if (!emailMatch) { errorLog.push({line, reason:'No email'}); return; } const email = emailMatch[0];
-
-const wager = parseFloat((line.match(/\t(\d+\.\d+)/)||[])[1]||0);
-const date = (line.match(/(\d{4}-\d{2}-\d{2})/)||[])[1]||'';
-
-if (!playerData[email]) {
-  playerData[email] = { email: email, totalWager:0, transactions:0, lastSeen:'', firstSeen:'' };
-}
-
-playerData[email].totalWager += wager;
-playerData[email].transactions += 1;
-if (!playerData[email].firstSeen && date) playerData[email].firstSeen = date;
-if (date) playerData[email].lastSeen = date;
-
+document.getElementById('fileInput').addEventListener('change', e => {
+  Array.from(e.target.files).forEach(file => {
+    const r = new FileReader();
+    r.onload = ev => document.getElementById('dataInput').value += '\n' + ev.target.result;
+    r.readAsText(file);
+  });
 });
 
-document.getElementById('stats').innerHTML = Players: <span class=\"stat\">${Object.keys(playerData).length}</span>;
+function analyzeData() {
+  const lines = document.getElementById('dataInput').value.split('\n');
+  playerData = {};
+  errorLog = [];
 
-generateBriefing(); }
+  lines.forEach(line => {
+    if (!line.trim()) return;
+    const emailMatch = line.match(/([\w.-]+@[\w.-]+\.[A-Za-z]{2,})/);
+    if (!emailMatch) { errorLog.push({line, reason:'No email'}); return; }
+    const email = emailMatch[0];
 
-function generateBriefing() { const briefingDiv = document.getElementById('briefing'); briefingDiv.style.display = 'block'; let briefingText = **ECHO Daily Brief – ${new Date().toLocaleDateString()}**\n\n;
+    const wager = parseFloat((line.match(/\t(\d+\.\d+)/)||[])[1]||0);
+    const date = (line.match(/(\d{4}-\d{2}-\d{2})/)||[])[1]||'';
 
-const players = Object.values(playerData);
+    if (!playerData[email]) {
+      playerData[email] = { email: email, totalWager:0, transactions:0, lastSeen:'', firstSeen:'' };
+    }
 
-const priorityPlayers = players.map(p => ({ ...p, Priority: calculatePriority(p), Tag: classifyPlayer(p), AtRisk: isAtRisk(p), RecommendedAction: recommendAction(p) })).sort((a,b)=>b.Priority - a.Priority);
+    playerData[email].totalWager += wager;
+    playerData[email].transactions += 1;
+    if (!playerData[email].firstSeen && date) playerData[email].firstSeen = date;
+    if (date) playerData[email].lastSeen = date;
+  });
 
-briefingText += 'Players requiring immediate action:\n'; priorityPlayers.slice(0,10).forEach(p => { briefingText += • ${p.email} | Segment: ${p.Tag} | Priority: ${p.Priority} | Last Seen: ${p.lastSeen} | Action: ${p.RecommendedAction}\nEmail Template:\n${emailTemplates[p.RecommendedAction](p)}\n; });
+  document.getElementById('stats').innerHTML = `Players: <span class=\"stat\">${Object.keys(playerData).length}</span>`;
 
-briefingText += '\nWatchlist:\n'; priorityPlayers.slice(10,20).forEach(p => { briefingText += • ${p.email} | Segment: ${p.Tag} | Trend: ${trend(p)} | Last Seen: ${p.lastSeen}\n; });
+  generateBriefing();
+}
 
-briefingText += '\nDo Not Contact This Week:\n'; priorityPlayers.slice(20).forEach(p => { briefingText += • ${p.email} | Segment: ${p.Tag} | Last Seen: ${p.lastSeen}\n; });
+function generateBriefing() {
+  const briefingDiv = document.getElementById('briefing');
+  briefingDiv.style.display = 'block';
+  let briefingText = `**ECHO Daily Brief – ${new Date().toLocaleDateString()}**\n\n`;
 
-briefingDiv.textContent = briefingText; }
+  const players = Object.values(playerData);
 
-function classifyPlayer(p) { if (p.totalWager >= 5000) return 'Whale'; if (p.totalWager >= 1000 && p.transactions >=10) return 'VIP'; if (p.transactions >=5) return 'Regular'; return 'Casual'; }
+  const priorityPlayers = players.map(p => ({
+    ...p,
+    Priority: calculatePriority(p),
+    Tag: classifyPlayer(p),
+    AtRisk: isAtRisk(p),
+    RecommendedAction: recommendAction(p)
+  })).sort((a,b)=>b.Priority - a.Priority);
 
-function isAtRisk(p) { if (!p.lastSeen) return true; return (Date.now() - new Date(p.lastSeen))/86400000 > 30; }
+  briefingText += 'Players requiring immediate action:\n';
+  priorityPlayers.slice(0,10).forEach(p => {
+    briefingText += `• ${p.email} | Segment: ${p.Tag} | Priority: ${p.Priority} | Last Seen: ${p.lastSeen} | Action: ${p.RecommendedAction}\nEmail Template:\n${emailTemplates[p.RecommendedAction](p)}\n`;
+  });
 
-function trend(p) { if (p.transactions >=15) return 'UP'; if (p.transactions >=5) return 'FLAT'; return 'DOWN'; }
+  briefingText += '\nWatchlist:\n';
+  priorityPlayers.slice(10,20).forEach(p => {
+    briefingText += `• ${p.email} | Segment: ${p.Tag} | Trend: ${trend(p)} | Last Seen: ${p.lastSeen}\n`;
+  });
 
-function calculatePriority(p) { let score=0; if (classifyPlayer(p)==='Whale') score+=40; if (classifyPlayer(p)==='VIP') score+=25; if (isAtRisk(p)) score+=20; if ((p.totalWager/p.transactions)*p.transactions>300) score+=15; if (!activeThisWeek(p)) score+=10; return score; }
+  briefingText += '\nDo Not Contact This Week:\n';
+  priorityPlayers.slice(20).forEach(p => {
+    briefingText += `• ${p.email} | Segment: ${p.Tag} | Last Seen: ${p.lastSeen}\n`;
+  });
 
-function activeThisWeek(p) { if (!p.lastSeen) return false; return (Date.now() - new Date(p.lastSeen))/86400000 <=7; }
+  briefingDiv.textContent = briefingText;
+}
 
-function recommendAction(p) { if (classifyPlayer(p)==='Whale' && !activeThisWeek(p)) return 'Reload bonus'; if (classifyPlayer(p)==='VIP' && isAtRisk(p)) return 'Loyalty email'; if (p.totalWager>300 && trend(p)==='DOWN') return 'Re-engagement offer'; return 'No action'; }
+function classifyPlayer(p) {
+  if (p.totalWager >= 5000) return 'Whale';
+  if (p.totalWager >= 1000 && p.transactions >=10) return 'VIP';
+  if (p.transactions >=5) return 'Regular';
+  return 'Casual';
+}
 
-function downloadSpreadsheet() { const wb = XLSX.utils.book_new(); const rows = Object.values(playerData).map(p => ({ Email: p.email, Tag: classifyPlayer(p), TotalWager: p.totalWager.toFixed(2), Transactions: p.transactions, Priority: calculatePriority(p), AtRisk: isAtRisk(p) ? 'YES':'NO', FirstSeen: p.firstSeen, LastSeen: p.lastSeen, RecommendedAction: recommendAction(p), EmailTemplate: emailTemplatesrecommendAction(p) }));
+function isAtRisk(p) {
+  if (!p.lastSeen) return true;
+  return (Date.now() - new Date(p.lastSeen))/86400000 > 30;
+}
 
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'All Players'); if (errorLog.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(errorLog), 'Error Log'); XLSX.writeFile(wb, 'ECHO_Affiliate_Intelligence.xlsx'); } </script>
+function trend(p) {
+  if (p.transactions >=15) return 'UP';
+  if (p.transactions >=5) return 'FLAT';
+  return 'DOWN';
+}
 
+function calculatePriority(p) {
+  let score=0;
+  if (classifyPlayer(p)==='Whale') score+=40;
+  if (classifyPlayer(p)==='VIP') score+=25;
+  if (isAtRisk(p)) score+=20;
+  if ((p.totalWager/p.transactions)*p.transactions>300) score+=15;
+  if (!activeThisWeek(p)) score+=10;
+  return score;
+}
+
+function activeThisWeek(p) {
+  if (!p.lastSeen) return false;
+  return (Date.now() - new Date(p.lastSeen))/86400000 <=7;
+}
+
+function recommendAction(p) {
+  if (classifyPlayer(p)==='Whale' && !activeThisWeek(p)) return 'Reload bonus';
+  if (classifyPlayer(p)==='VIP' && isAtRisk(p)) return 'Loyalty email';
+  if (p.totalWager>300 && trend(p)==='DOWN') return 'Re-engagement offer';
+  return 'No action';
+}
+
+function downloadSpreadsheet() {
+  const wb = XLSX.utils.book_new();
+  const rows = Object.values(playerData).map(p => ({
+    Email: p.email,
+    Tag: classifyPlayer(p),
+    TotalWager: p.totalWager.toFixed(2),
+    Transactions: p.transactions,
+    Priority: calculatePriority(p),
+    AtRisk: isAtRisk(p) ? 'YES':'NO',
+    FirstSeen: p.firstSeen,
+    LastSeen: p.lastSeen,
+    RecommendedAction: recommendAction(p),
+    EmailTemplate: emailTemplates[recommendAction(p)](p)
+  }));
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'All Players');
+  if (errorLog.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(errorLog), 'Error Log');
+  XLSX.writeFile(wb, 'ECHO_Affiliate_Intelligence.xlsx');
+}
+</script>
 </body>
 </html>
